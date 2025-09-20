@@ -1,0 +1,13 @@
+[project]
+name = "rtmdet-pytorch-implementation"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy<2.0",
+    "pydantic>=2.11.9",
+    "pyyaml>=6.0.2",
+    "torch>=2.8.0",
+    "torchvision>=0.23.0",
+]
