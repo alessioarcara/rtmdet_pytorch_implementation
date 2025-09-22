@@ -8,31 +8,31 @@ from src.layers.csp_next_block import CSPNextBlock
 
 
 class CSPLayer(nn.Module):
-    def __init__(self, add: bool, c: int, n: int):
+    def __init__(
+        self, c_in: int, c_out: int, n: int, add: bool, use_attention: bool = False
+    ):
         super().__init__()
+        assert c_out % 2 == 0, "CSPLayer richiede c_out pari"
 
-        c_half = c // 2
+        c_half = c_out // 2
 
         self.main_conv = ConvModule(
-            kernel_size=1, stride=1, padding=0, c_in=c, c_out=c_half
+            kernel_size=1, stride=1, padding=0, c_in=c_in, c_out=c_half
         )
         self.short_conv = ConvModule(
-            kernel_size=1, stride=1, padding=0, c_in=c, c_out=c_half
+            kernel_size=1, stride=1, padding=0, c_in=c_in, c_out=c_half
         )
         self.final_conv = ConvModule(
-            kernel_size=1, stride=1, padding=0, c_in=c, c_out=c
+            kernel_size=1, stride=1, padding=0, c_in=c_out, c_out=c_out
         )
 
-        self.blocks = nn.Sequential()
-        for _ in range(n):
-            self.blocks.append(CSPNextBlock(c=c_half, add=add))
+        blocks = [CSPNextBlock(c=c_half, add=add) for _ in range(n)]
+        self.blocks = nn.Sequential(*blocks)
 
-        self.attention = ChannelAttention(c=c)
+        self.attention = ChannelAttention(c=c_out) if use_attention else nn.Identity()
 
     def forward(self, x: Tensor) -> Tensor:
         x_main = self.blocks(self.main_conv(x))
         x_short = self.short_conv(x)
         x = torch.cat([x_main, x_short], dim=1)
-        x = self.attention(x)
-        x = self.final_conv(x)
-        return x
+        return self.final_conv(self.attention(x))
