@@ -25,7 +25,9 @@ def main():
     check_params_updated(model=neck, sd=sd_neck)
 
     x = torch.randn(1, 3, 640, 640)
-    stride8, stride16, stride32 = backbone(x)
+    inputs = backbone(x)
+    inputs = neck(inputs)
+    print(inputs)
 
 
 if __name__ == "__main__":

@@ -13,6 +13,10 @@ class Config(BaseModel):
         ...,
         description="Scaling factor for the model width (e.g., the number of channels or neurons)",
     )
+    pafpn_out_channels: int = Field(
+        ...,
+        description="Output channels of the convolution layers in the PAFPN module",
+    )
 
 
 def load_config(path: str | Path) -> Config:
