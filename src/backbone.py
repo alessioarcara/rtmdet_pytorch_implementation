@@ -4,19 +4,15 @@ from typing import Tuple
 
 from src.config import Config
 from src.layers import ConvModule, CSPLayer, SPFFBottleneck
+from src.utils import apply_factor
 
 
 class CSPNext(nn.Module):
     def __init__(self, cfg: Config):
         super().__init__()
-        deepen = cfg.deepen_factor
-        widen = cfg.widen_factor
 
-        base_channels = [32, 32, 64, 128, 256, 512, 1024]
-        ch = [max(1, int(round(c * widen))) for c in base_channels]
-
-        base_depths = [3, 6, 6, 3]
-        depths = [max(1, int(round(d * deepen))) for d in base_depths]
+        ch = apply_factor([32, 32, 64, 128, 256, 512, 1024], cfg.widen_factor)
+        depths = apply_factor([3, 6, 6, 3], cfg.deepen_factor)
 
         self.stem = nn.Sequential(
             ConvModule(c_in=3, c_out=ch[0], stride=2),

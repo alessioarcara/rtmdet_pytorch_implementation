@@ -6,6 +6,7 @@ from torch import Tensor
 
 from src.config import Config
 from src.layers import ConvModule, CSPLayer
+from src.utils import apply_factor
 
 
 class CSPNeXtPAFPN(nn.Module):
@@ -15,14 +16,10 @@ class CSPNeXtPAFPN(nn.Module):
 
     def __init__(self, cfg: Config):
         super().__init__()
-        deepen = cfg.deepen_factor
-        widen = cfg.widen_factor
 
-        base_channels = [256, 512, 1024]
-        ch = [max(1, int(round(c * widen))) for c in base_channels]
-
-        depth = max(1, int(round(3 * deepen)))
-        pafpn_out_channels = max(1, int(round(cfg.pafpn_out_channels * widen)))
+        ch = apply_factor([256, 512, 1024], cfg.widen_factor)
+        depth = apply_factor(3, cfg.deepen_factor)
+        pafpn_out_channels = apply_factor(cfg.pafpn_out_channels, cfg.widen_factor)
 
         self.num_levels = len(ch)
 
