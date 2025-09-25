@@ -19,7 +19,7 @@ class CSPNeXtPAFPN(nn.Module):
 
         ch = apply_factor([256, 512, 1024], cfg.widen_factor)
         depth = apply_factor(3, cfg.deepen_factor)
-        pafpn_out_channels = apply_factor(cfg.pafpn_out_channels, cfg.widen_factor)
+        neck_out_channels = apply_factor(cfg.neck_out_channels, cfg.widen_factor)
 
         self.num_levels = len(ch)
 
@@ -77,7 +77,7 @@ class CSPNeXtPAFPN(nn.Module):
             self.out_convs.append(
                 ConvModule(
                     c_in=ch[i],
-                    c_out=pafpn_out_channels,
+                    c_out=neck_out_channels,
                     kernel_size=3,
                     stride=1,
                     padding=1,

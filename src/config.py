@@ -13,9 +13,18 @@ class Config(BaseModel):
         ...,
         description="Scaling factor for the model width (e.g., the number of channels or neurons)",
     )
-    pafpn_out_channels: int = Field(
+    neck_out_channels: int = Field(
         ...,
-        description="Output channels of the convolution layers in the PAFPN module",
+        description="Number of channels of the output convolution layers in the PAFPN module",
+    )
+    head_num_stacked_convs: int = Field(
+        ...,
+        description="Number of convolution blocks in each classification/regression tower",
+    )
+    head_num_levels: int = Field(
+        ...,
+        ge=1,
+        description="Number of pyramid levels the head operates on (e.g., 3 for P3-P5). Must equal the number of feature maps provided by the neck",
     )
 
 

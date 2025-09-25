@@ -1,6 +1,7 @@
+from typing import Tuple
+
 import torch.nn as nn
 from torch import Tensor
-from typing import Tuple
 
 from src.config import Config
 from src.layers import ConvModule, CSPLayer, SPFFBottleneck

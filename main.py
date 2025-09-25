@@ -1,7 +1,6 @@
 import torch
 
-from src.backbone import CSPNext
-from src.neck import CSPNeXtPAFPN
+from src.rtmdet import RTMDet
 from src.checkpoint_utils import (
     extract_sub_state_dict,
     load_mmdet_checkpoint,
@@ -13,21 +12,14 @@ from src.config import load_config
 
 def main():
     sd = load_mmdet_checkpoint("./checkpoints/rtmdet_tiny.pth")
-    print_state_dict(sd)
-    sd_backbone = extract_sub_state_dict(sd, "backbone.")
-    sd_neck = extract_sub_state_dict(sd, "neck.")
-
     cfg = load_config("./configs/rtmdet_tiny.yaml")
-    backbone = CSPNext(cfg=cfg)
-    neck = CSPNeXtPAFPN(cfg=cfg)
+    model = RTMDet(cfg=cfg, num_classes=80)
 
-    check_params_updated(model=backbone, sd=sd_backbone)
-    check_params_updated(model=neck, sd=sd_neck)
+    check_params_updated(model=model, sd=sd)
 
     x = torch.randn(1, 3, 640, 640)
-    inputs = backbone(x)
-    inputs = neck(inputs)
-    print(inputs)
+    out = model(x)
+    print(out)
 
 
 if __name__ == "__main__":
