@@ -17,8 +17,8 @@ def main():
 
     check_params_updated(model=model, sd=sd)
 
-    x = torch.randn(1, 3, 640, 640)
-    out = model(x)
+    x = torch.randn(24, 3, 640, 640)
+    out = model.predict(x)
     print(out)
 
 
