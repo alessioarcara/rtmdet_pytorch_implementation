@@ -8,6 +8,20 @@ The goal is to reimplement the network in pure PyTorch while making it possible 
 
 ![RTMDet-L model](assets/rtmdet-l_model_structure.jpg)
 
+## Installation
+
+```bash
+pip install rtmdet
+```
+
+## Usage
+
+```python
+from rtmdet import RTMDet
+
+model = RTMDet.from_preset("small")
+```
+
 ## References
 
 - **RTMDet: An Empirical Study of Real-Time Object Detectors**  
