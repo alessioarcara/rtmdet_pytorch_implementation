@@ -4,9 +4,9 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-from src.config import Config
-from src.layers import ConvModule, CSPLayer
-from src.utils import apply_factor
+from rtmdet.config import RTMDetConfig
+from rtmdet.layers import ConvModule, CSPLayer
+from rtmdet.utils import apply_factor
 
 
 class CSPNeXtPAFPN(nn.Module):
@@ -14,7 +14,7 @@ class CSPNeXtPAFPN(nn.Module):
     PAFPN-style neck with CSP blocks (similar to YOLO)
     """
 
-    def __init__(self, cfg: Config):
+    def __init__(self, cfg: RTMDetConfig):
         super().__init__()
 
         ch = apply_factor([256, 512, 1024], cfg.widen_factor)

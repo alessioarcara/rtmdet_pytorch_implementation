@@ -545,9 +545,9 @@ wheels = [
 ]
 
 [[package]]
-name = "rtmdet-pytorch-implementation"
+name = "rtmdet"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "numpy" },
     { name = "pydantic" },

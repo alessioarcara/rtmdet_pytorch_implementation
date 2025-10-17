@@ -2,9 +2,9 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-from src.layers.channel_attention import ChannelAttention
-from src.layers.conv_module import ConvModule
-from src.layers.csp_next_block import CSPNextBlock
+from rtmdet.layers.channel_attention import ChannelAttention
+from rtmdet.layers.conv_module import ConvModule
+from rtmdet.layers.csp_next_block import CSPNextBlock
 
 
 class CSPLayer(nn.Module):

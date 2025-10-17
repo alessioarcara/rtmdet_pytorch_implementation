@@ -1,7 +1,7 @@
 import torch.nn as nn
 from torch import Tensor
 
-from src.layers.conv_module import ConvModule, DWConvModule
+from rtmdet.layers.conv_module import ConvModule, DWConvModule
 
 
 class CSPNextBlock(nn.Module):

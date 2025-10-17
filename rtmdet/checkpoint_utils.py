@@ -1,11 +1,10 @@
-from typing import Dict, TypeAlias
+from pathlib import Path
 
 import numpy as np
 import torch
 from torch.serialization import add_safe_globals
 
-StateDict: TypeAlias = Dict[str, torch.Tensor]
-
+from rtmdet.typings import StateDict
 
 HistoryBufferDummy = type("HistoryBuffer", (), {})
 HistoryBufferDummy.__module__ = "mmengine.logging.history_buffer"
@@ -48,9 +47,23 @@ def print_state_dict(sd: StateDict, max_key_len: int = 60) -> None:
             print(f"{key_str} ({type(v).__name__})")
 
 
-def check_params_updated(model: torch.nn.Module, sd: StateDict) -> None:
+def _safe_load_state_dict(model: torch.nn.Module, sd: StateDict) -> None:
+    """
+    Load a state_dict into a model, ignoring any keys with mismatched shapes or missing entries.
+    """
+    model_sd: StateDict = model.state_dict()
+    compatible_weights = {
+        k: v for k, v in sd.items() if k in model_sd and model_sd[k].shape == v.shape
+    }
+
+    model.load_state_dict(compatible_weights, strict=False)
+
+
+def load_and_verify_weight(model: torch.nn.Module, sd: StateDict) -> None:
     before_sd = {k: v.clone() for k, v in model.state_dict().items()}
-    model.load_state_dict(sd, strict=False)
+
+    _safe_load_state_dict(model, sd)
+
     after_sd = model.state_dict()
 
     for name, before in before_sd.items():
@@ -59,3 +72,23 @@ def check_params_updated(model: torch.nn.Module, sd: StateDict) -> None:
             print(f"🔴 {name}: unchanged")
         else:
             print(f"🟢 {name}: updated")
+
+
+def _default_cache_dir() -> Path:
+    cache_dir = Path(torch.hub.get_dir()) / "rtmdet"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir
+
+
+def _cached_weights_path(url: str) -> Path:
+    return _default_cache_dir() / Path(url).name
+
+
+def _download_if_needed(url: str) -> Path:
+    dst = _cached_weights_path(url)
+
+    if dst.exists():
+        return dst
+
+    torch.hub.download_url_to_file(url, dst)
+    return dst

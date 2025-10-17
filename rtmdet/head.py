@@ -3,15 +3,14 @@ from typing import List, Tuple
 import torch.nn as nn
 from torch import Tensor
 
-from src.config import Config
-from src.layers import ConvModule
-from src.utils import apply_factor
+from rtmdet.config import RTMDetConfig
+from rtmdet.layers import ConvModule
+from rtmdet.utils import apply_factor
 
 
 class RTMDetHead(nn.Module):
-    def __init__(self, cfg: Config, num_classes: int):
+    def __init__(self, cfg: RTMDetConfig):
         super().__init__()
-        self.cfg = cfg
         c = apply_factor(cfg.neck_out_channels, cfg.widen_factor)
 
         # Per-level towers
@@ -43,7 +42,7 @@ class RTMDetHead(nn.Module):
             rtm_cls.append(
                 nn.Conv2d(
                     in_channels=c,
-                    out_channels=num_classes,
+                    out_channels=cfg.num_classes,
                     kernel_size=1,
                     stride=1,
                     padding=0,

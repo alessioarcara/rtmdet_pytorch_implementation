@@ -3,13 +3,13 @@ from typing import Tuple
 import torch.nn as nn
 from torch import Tensor
 
-from src.config import Config
-from src.layers import ConvModule, CSPLayer, SPFFBottleneck
-from src.utils import apply_factor
+from rtmdet.config import RTMDetConfig
+from rtmdet.layers import ConvModule, CSPLayer, SPFFBottleneck
+from rtmdet.utils import apply_factor
 
 
 class CSPNext(nn.Module):
-    def __init__(self, cfg: Config):
+    def __init__(self, cfg: RTMDetConfig):
         super().__init__()
 
         ch = apply_factor([32, 32, 64, 128, 256, 512, 1024], cfg.widen_factor)

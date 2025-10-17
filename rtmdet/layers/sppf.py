@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-from src.layers.conv_module import ConvModule
+from rtmdet.layers.conv_module import ConvModule
 
 
 class SPFFBottleneck(nn.Module):
