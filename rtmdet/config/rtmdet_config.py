@@ -22,27 +22,36 @@ class RTMDetConfig(BaseModel):
         description="Scaling factor for the model width (e.g., the number of channels or neurons)",
     )
     neck_out_channels: PositiveInt = Field(
-        ...,
+        256,
         description="Number of channels of the output convolution layers in the PAFPN module",
     )
     # ---- Head ---
-    head_num_stacked_convs: PositiveInt = Field(
-        ...,
-        description="Number of convolution blocks in each classification/regression tower",
-    )
     head_num_levels: PositiveInt = Field(
-        ...,
+        3,
         ge=1,
         description="Number of pyramid levels the head operates on (e.g., 3 for P3-P5). Must equal the number of feature maps provided by the neck",
+    )
+    head_num_stacked_convs: PositiveInt = Field(
+        2,
+        description="Number of convolution blocks in each classification/regression tower",
     )
     num_classes: PositiveInt = Field(80, description="Number of classes")
     input_size: PositiveInt = Field(
         640, description="Input image size (assumes a square input)"
     )
-    # nms_iou_threshold: float = Field(
-    #     0.50, ge=0.0, le=1.0,
-    #     ""
-    # )
+    # ---- Post-processing ----
+    score_threshold: float = Field(
+        0.001,
+        ge=0.0,
+        le=1.0,
+        description="Score threshold to filter predictions before NMS",
+    )
+    nms_iou_threshold: float = Field(
+        0.65,
+        ge=0.0,
+        le=1.0,
+        description="IoU threshold for NMS. All overlapping boxes with an IoU > are discarded",
+    )
     max_num_detections: int = Field(
         300, description="Maximum number of detections kept after NMS per image"
     )

@@ -1,5 +1,2 @@
 deepen_factor: 0.167
 widen_factor: 0.375
-neck_out_channels: 256
-head_num_levels: 3
-head_num_stacked_convs: 2

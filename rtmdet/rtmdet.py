@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -17,52 +17,55 @@ from rtmdet.typings import PresetName
 
 
 class RTMDet(nn.Module):
-    def __init__(self, cfg: RTMDetConfig, separate_outputs: bool = True):
+    def __init__(self, cfg: RTMDetConfig):
         super().__init__()
         self.backbone = CSPNext(cfg=cfg)
         self.neck = CSPNeXtPAFPN(cfg=cfg)
         self.bbox_head = RTMDetHead(cfg=cfg)
 
-        self.stage = [80, 40, 20]
         self.export_mode = False
-
+        self.input_shape = cfg.input_size
+        self.score_threshold = cfg.score_threshold
+        self.nms_iou_threshold = cfg.nms_iou_threshold
         self.max_num_detections = cfg.max_num_detections
-        self.separate_outputs = separate_outputs
 
     def _forward_raw(self, x: Tensor) -> Tuple[List[Tensor], ...]:
+        """
+        Returns raw head outputs:
+            - cls_outputs : For each level l: [B, C_cls, H_l, W_l] with per-class logits
+            - box_outputs : For each level l: [B, 4, H_l, W_l] with box offsets
+        """
         x = self.backbone(x)
         x = self.neck(x)
         cls_outputs, box_outputs = self.bbox_head(x)
         return cls_outputs, box_outputs
 
-    def forward(
-        self, x: Tensor
-    ) -> Union[
-        Tensor,
-        Tuple[List[Tensor], ...],  # training
-        Tuple[Tensor, ...],
-    ]:
-        if self.export_mode:
-            return self.predict(x)
-        return self._forward_raw(x)
-
-    def predict(self, x: Tensor) -> Union[Tensor, Tuple[Tensor, ...]]:
-        """
-        Applies postprocessing and NMS.
-
-        Returns:
-          - se separate_outputs=False: Tensor [B, N, 6] con [x1, y1, x2, y2, conf, class]
-          - se separate_outputs=True:  (boxes_scores [B, N, 5], class_idx [B, N])
-        """
+    def forward(self, x: Tensor) -> Tuple[Tensor, ...]:
         cls_outputs, box_outputs = self._forward_raw(x)
-        device = x.device
-        # Restituisce due tensori:
-        # - Il primo ha un numero di canali pari al numero di classi.
-        # - Il secondo ha 4 canali che rappresentano le coordinate della bounding box nel formato (x1, y1, x2, y2).
+
+        boxes, scores, classes = self.decode(
+            cls_outputs, box_outputs
+        )  # [B, N, 4], [B, N, 1], [B, N]
+
+        if self.export_mode:
+            boxes, scores, classes = self.nms(boxes, scores, classes)
+            boxes_with_scores = torch.cat((boxes, scores), dim=-1)  # [B, max_num, 5]
+            return boxes_with_scores, classes
+        else:
+            return boxes, scores, classes
+
+    def decode(
+        self, cls_outputs: List[Tensor], box_outputs: List[Tensor]
+    ) -> Tuple[Tensor, ...]:
+        """
+        Converts per-pyramid-level raw head outputs into
+        absolute [x1, y1, x2, y2], score, class tensors
+        """
+        assert len(cls_outputs) == len(box_outputs), "cls/box levels mismatch"
+        device = cls_outputs[0].device
+        B = cls_outputs[0].shape[0]
 
         boxes_list = []
-        B = x.shape[0]
-
         # Itera su ogni stage della feature pyramid
         for i, (cls, box) in enumerate(zip(cls_outputs, box_outputs)):
             # [B, C, H, W] -> [B, H, W, C]
@@ -81,10 +84,11 @@ class RTMDet(nn.Module):
             box = torch.cat([box, conf, class_idx], dim=-1)  # [B, H, W, 6]
 
             # Calcola dimensione di una cella in pixel
-            step = self.input_shape // self.stage[i]
+            stage = box.shape[1]
+            step = self.input_shape // stage
 
             # Crea un vettore di coordinate delle celle nella griglia
-            grid = torch.arange(self.stage[i], device=device) * step
+            grid = torch.arange(stage, device=device) * step
             # Crea coordinate x e y della griglia
             # gx =
             # [[0, 32, 64],
@@ -114,32 +118,30 @@ class RTMDet(nn.Module):
 
         result_box = torch.cat(boxes_list, dim=1)
 
-        if not self.separate_outputs:
-            return result_box
+        boxes = result_box[..., :4]  # [x1,y1,x2,y2]
+        scores = result_box[..., 4:5]  # [conf]
+        classes = result_box[..., 5].to(torch.long)  # [class]
 
-        boxes, scores, classes = self.batch_nms(result_box)
-        boxes_with_scores = torch.cat((boxes, scores), dim=-1)  # [B, K, 5]
+        return boxes, scores, classes
 
-        return boxes_with_scores, classes
-
-    def batch_nms(
+    def nms(
         self,
-        result_box: Tensor,  # [B, N, 6]
+        boxes: Tensor,  # [B, N, 4]
+        scores: Tensor,  # [B, N, 1]
+        classes: Tensor,  # [B, N]
     ) -> Tuple[Tensor, ...]:
-        B = result_box.size(0)
-
-        boxes = result_box[:, :, :4]  # [x1,y1,x2,y2]
-        scores = result_box[:, :, 4]  # [conf]
-        classes = result_box[:, :, 5].to(torch.long)  # [class]
+        """
+        Class-wise nms per image
+        """
+        B = boxes.shape[0]
 
         batch_boxes, batch_scores, batch_classes = [], [], []
-
         for i in range(B):
             keep = batched_nms(
                 boxes[i],
                 scores[i],
                 classes[i],
-                iou_threshold=0.5,
+                iou_threshold=self.nms_iou_threshold,
             )[: self.max_num_detections]
 
             batch_boxes.append(boxes[i][keep])  # [max_num, 4]
@@ -148,7 +150,7 @@ class RTMDet(nn.Module):
 
         final_boxes = torch.stack(batch_boxes, dim=0)  # [B, max_num, 4]
         final_scores = torch.stack(batch_scores, dim=0)  # [B, max_num, 1]
-        final_classes = torch.stack(batch_scores, dim=0)  # [B, max_num]
+        final_classes = torch.stack(batch_classes, dim=0)  # [B, max_num]
         return final_boxes, final_scores, final_classes
 
     @classmethod
@@ -171,10 +173,10 @@ class RTMDet(nn.Module):
             cache_dir.mkdir(parents=True, exist_ok=True)
             ckpt_path = cache_dir / Path(url).name
 
-        if not ckpt_path.exists():
-            torch.hub.download_url_to_file(url, ckpt_path)
+            if not ckpt_path.exists():
+                torch.hub.download_url_to_file(url, str(ckpt_path))
 
-        state_dict = load_mmdet_checkpoint(ckpt_path)
-        load_and_verify_weight(model, state_dict)
+            state_dict = load_mmdet_checkpoint(str(ckpt_path))
+            load_and_verify_weight(model, state_dict)
 
         return model
