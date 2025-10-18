@@ -32,8 +32,8 @@ class RTMDet(nn.Module):
     def _forward_raw(self, x: Tensor) -> Tuple[List[Tensor], ...]:
         """
         Returns raw head outputs:
-            - cls_outputs : For each level l: [B, C_cls, H_l, W_l] with per-class logits
-            - box_outputs : For each level l: [B, 4, H_l, W_l] with box offsets
+            - cls_outputs : per-level class logits [B, C_cls, H_l, W_l]
+            - box_outputs : per-level box offsets [B, 4, H_l, W_l]
         """
         x = self.backbone(x)
         x = self.neck(x)
@@ -66,30 +66,29 @@ class RTMDet(nn.Module):
         B = cls_outputs[0].shape[0]
 
         boxes_list = []
-        # Itera su ogni stage della feature pyramid
+        # Iterate over each feature pyramid level
         for i, (cls, box) in enumerate(zip(cls_outputs, box_outputs)):
             # [B, C, H, W] -> [B, H, W, C]
             cls = cls.permute(0, 2, 3, 1).contiguous()
             box = box.permute(0, 2, 3, 1).contiguous()
 
-            # Probabilita' in [0,1]
+            # logits -> probabilities
             cls = torch.sigmoid(cls)
 
-            # conf = max su classi; class_idx = indice classe max
+            # max probability and corresponding class index
             conf, class_idx = torch.max(cls, dim=3, keepdim=True)
             class_idx = class_idx.to(torch.float32)
 
-            # Unisce box offsets, class index e confidence
-            # Ogni box: [x1_off, y1_off, x2_off, y2_off, conf, class]
+            # Combine box offsets, confidence, and class index
+            # Each box: [x1_off, y1_off, x2_off, y2_off, conf, class]
             box = torch.cat([box, conf, class_idx], dim=-1)  # [B, H, W, 6]
 
-            # Calcola dimensione di una cella in pixel
+            # Compute grid step size in pixels
             stage = box.shape[1]
             step = self.input_shape // stage
 
-            # Crea un vettore di coordinate delle celle nella griglia
+            # Create grid coordinates
             grid = torch.arange(stage, device=device) * step
-            # Crea coordinate x e y della griglia
             # gx =
             # [[0, 32, 64],
             # [0, 32, 64],
@@ -99,7 +98,7 @@ class RTMDet(nn.Module):
             # [32, 32, 32],
             # [64, 64, 64]]
             gx, gy = torch.meshgrid(grid, grid, indexing="xy")
-            # block contiene le coordinate (x, y) del punto di riferimento in pixel della cella (y, x) nella griglia
+            # block (y, x) contains the reference point (x, y) in pixel space
             # block =
             # [
             #  [[ [0, 0], [32, 0], [64, 0] ],
@@ -108,19 +107,26 @@ class RTMDet(nn.Module):
             # ]
             block = torch.stack([gx, gy], dim=-1)
 
-            # Aggiusta le coordinate delle box rispetto alla griglia
+            # Adjust predicted offsets relative to grid position
             box[..., :2] = block - box[..., :2]  # top-left
             box[..., 2:4] = block + box[..., 2:4]  # bottom-right
 
+            # Flatten spatial dimensions
             # [B, H*W, 6]
             box = box.reshape(B, -1, 6)
             boxes_list.append(box)
+
+        # Concatenate all levels;w
 
         result_box = torch.cat(boxes_list, dim=1)
 
         boxes = result_box[..., :4]  # [x1,y1,x2,y2]
         scores = result_box[..., 4:5]  # [conf]
         classes = result_box[..., 5].to(torch.long)  # [class]
+
+        # Clamp box coordinates to image bounds to prevent negatives or out-of-range values
+        boxes[..., 0::2] = boxes[..., 0::2].clamp_(0, self.input_shape - 1)
+        boxes[..., 1::2] = boxes[..., 1::2].clamp_(0, self.input_shape - 1)
 
         return boxes, scores, classes
 
