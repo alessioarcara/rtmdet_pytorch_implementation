@@ -40,19 +40,35 @@ class RTMDet(nn.Module):
         cls_outputs, box_outputs = self.bbox_head(x)
         return cls_outputs, box_outputs
 
-    def forward(self, x: Tensor) -> Tuple[Tensor, ...]:
+    def forward(self, x: Tensor, return_logits: bool = False) -> Tuple[Tensor, ...]:
+        """
+        Returns:
+          - export_mode=False, return_logits=False:
+              boxes[B,N,4], scores[B,N,1], classes[B,N]
+          - export_mode=False, return_logits=True:
+              boxes, scores, classes, logits[B,N,C]
+          - export_mode=True:
+              boxes_with_scores[B,max_num,5], classes[B,max_num]
+        """
         cls_outputs, box_outputs = self._forward_raw(x)
 
-        boxes, scores, classes = self.decode(
-            cls_outputs, box_outputs
-        )  # [B, N, 4], [B, N, 1], [B, N]
+        boxes, scores, classes = self.decode(cls_outputs, box_outputs)
 
         if self.export_mode:
             boxes, scores, classes = self.nms(boxes, scores, classes)
             boxes_with_scores = torch.cat((boxes, scores), dim=-1)  # [B, max_num, 5]
             return boxes_with_scores, classes
-        else:
-            return boxes, scores, classes
+
+        if return_logits:
+            flat_logits = []
+            for lvl in cls_outputs:  # [B, C, H, W]
+                B, C, H, W = lvl.shape
+                flat = lvl.permute(0, 2, 3, 1).contiguous().reshape(B, H * W, C)
+                flat_logits.append(flat)
+            logits = torch.cat(flat_logits, dim=1)  # [B, N, C]
+            return boxes, scores, classes, logits
+
+        return boxes, scores, classes
 
     def decode(
         self, cls_outputs: List[Tensor], box_outputs: List[Tensor]
@@ -66,7 +82,6 @@ class RTMDet(nn.Module):
         B = cls_outputs[0].shape[0]
 
         boxes_list = []
-        # Iterate over each feature pyramid level
         for i, (cls, box) in enumerate(zip(cls_outputs, box_outputs)):
             # [B, C, H, W] -> [B, H, W, C]
             cls = cls.permute(0, 2, 3, 1).contiguous()
@@ -75,7 +90,7 @@ class RTMDet(nn.Module):
             # logits -> probabilities
             cls = torch.sigmoid(cls)
 
-            # max probability and corresponding class index
+            # per-location best class + score
             conf, class_idx = torch.max(cls, dim=3, keepdim=True)
             class_idx = class_idx.to(torch.float32)
 
@@ -116,8 +131,7 @@ class RTMDet(nn.Module):
             box = box.reshape(B, -1, 6)
             boxes_list.append(box)
 
-        # Concatenate all levels;w
-
+        # Concatenate all levels
         result_box = torch.cat(boxes_list, dim=1)
 
         boxes = result_box[..., :4]  # [x1,y1,x2,y2]
@@ -133,7 +147,7 @@ class RTMDet(nn.Module):
     def nms(
         self,
         boxes: Tensor,  # [B, N, 4]
-        scores: Tensor,  # [B, N, 1]
+        scores: Tensor,  # [B, N]
         classes: Tensor,  # [B, N]
     ) -> Tuple[Tensor, ...]:
         """
@@ -143,6 +157,16 @@ class RTMDet(nn.Module):
 
         batch_boxes, batch_scores, batch_classes = [], [], []
         for i in range(B):
+            im_boxes = boxes[i]
+            im_scores = scores[i]
+            im_classes = classes[i]
+
+            # threshold before nms to reduce work
+            keep = im_scores >= float(self.score_threshold)
+            im_boxes = im_boxes[keep]
+            im_scores = im_scores[keep]
+            im_classes = im_classes[keep]
+
             keep = batched_nms(
                 boxes[i],
                 scores[i],
@@ -154,10 +178,11 @@ class RTMDet(nn.Module):
             batch_scores.append(scores[i][keep].unsqueeze(-1))  # [max_num, 1]
             batch_classes.append(classes[i][keep])  # [max_num]
 
-        final_boxes = torch.stack(batch_boxes, dim=0)  # [B, max_num, 4]
-        final_scores = torch.stack(batch_scores, dim=0)  # [B, max_num, 1]
-        final_classes = torch.stack(batch_classes, dim=0)  # [B, max_num]
-        return final_boxes, final_scores, final_classes
+        return (
+            torch.stack(batch_boxes, 0),
+            torch.stack(batch_scores, 0),
+            torch.stack(batch_classes, 0),
+        )
 
     @classmethod
     @validate_call

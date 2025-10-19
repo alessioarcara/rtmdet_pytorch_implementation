@@ -19,7 +19,8 @@ pip install rtmdet
 ```python
 from rtmdet import RTMDet
 
-model = RTMDet.from_preset("small")
+model = RTMDet.from_preset("small")  # tiny / small / medium / large
+bboxes, scores, classes = model("image.jpg")
 ```
 
 ## References
@@ -27,3 +28,6 @@ model = RTMDet.from_preset("small")
 - **RTMDet: An Empirical Study of Real-Time Object Detectors**  
   Xiangyu Zhang, Xinyu Zhou, Zhiqi Li, et al.  
   [📄 Paper](https://arxiv.org/abs/2212.07784)
+
+## Acknowledgments
+Based on [MMDetection](https://github.com/open-mmlab/mmdetection) and the official RTMDet implementation.

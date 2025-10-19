@@ -8,7 +8,7 @@ import torch.nn as nn
 from PIL import Image, ImageDraw
 from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
-from torchvision.ops import box_iou, generalized_box_iou_loss
+from torchvision.ops import box_iou, complete_box_iou_loss
 from tqdm import tqdm
 
 from rtmdet import RTMDet
@@ -119,7 +119,7 @@ def main():
 
             optim.zero_grad(set_to_none=True)
 
-            pred_boxes, pred_scores, _ = model(imgs)  # [B, N, 4], [B, 1, N], [B, N]
+            pred_boxes, _, _, pred_logits = model(imgs, return_logits=True)
 
             B = pred_boxes.shape[0]
 
@@ -129,38 +129,26 @@ def main():
 
             # box loss on best proposals
             pred_boxes_best = pred_boxes[torch.arange(B, device=device), best_idx]
-            giou = generalized_box_iou_loss(
-                gt_boxes, pred_boxes_best.unsqueeze(1), reduction="mean"
-            )
-
-            cls_outputs, _ = model._forward_raw(imgs)  # [B, C, H, W]
-
-            logits_levels = []
-            for cls_l in cls_outputs:
-                # [B, C, H, W] -> [B, H, W, C] -> [B, H*W, C]
-                logits_levels.append(
-                    cls_l.permute(0, 2, 3, 1)
-                    .contiguous()
-                    .view(cls_l.size(0), -1, cls_l.size(1))
-                )
-            pred_logits_all = torch.cat(logits_levels, dim=1)  # [B, N, C]
-
-            pred_logits_best = pred_logits_all[
+            pred_logits_best = pred_logits[
                 torch.arange(B, device=device), best_idx
             ]  # [B, C]
+
+            ciou = complete_box_iou_loss(
+                gt_boxes, pred_boxes_best.unsqueeze(1), reduction="mean"
+            )
 
             ce = nn.CrossEntropyLoss()(
                 pred_logits_best, gt_labels.squeeze(-1).to(torch.long)
             )
 
-            loss = 2.0 * giou + 1.0 * ce
+            loss = 2.0 * ciou + 1.0 * ce
 
             loss.backward()
             optim.step()
 
             pbar.set_postfix(
                 loss=f"{loss.item():.4f}",
-                giou=f"{giou.item():.4f}",
+                ciou=f"{ciou.item():.4f}",
                 ce=f"{ce.item():.4f}",
             )
 
