@@ -1,3 +1,11 @@
+# /// script
+# dependencies = [
+#   "rtmdet",
+#   "tqdm",
+# ]
+# ///
+
+
 import random
 from dataclasses import dataclass
 from typing import Dict, Tuple
